@@ -10,21 +10,20 @@ on:
     branches:
       - main
 
-# Read-only repository access is sufficient for running tests.
+# Read-only repository access is sufficient for validation.
 permissions:
   contents: read
 
 jobs:
+  # Job 1: Run the Python test suite.
   test:
     name: Run Python Tests
     runs-on: ubuntu-latest
 
     steps:
-      # Download the repository contents onto the GitHub runner.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Use the same Python minor version as the local project environment.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -32,10 +31,30 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      # Install DataForge and its development dependencies.
       - name: Install project
         run: python -m pip install -e ".[dev]"
 
-      # Execute the existing ingestion and data-quality tests.
       - name: Run tests
         run: python -m pytest
+
+  # Job 2: Validate the Airflow DAG.
+  validate-airflow:
+    name: Validate Airflow DAG
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Airflow Docker image
+        run: docker build -t dataforge-airflow:ci -f docker/airflow/Dockerfile .
+
+      - name: Check DAG import errors
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            -v "$PWD/dags:/opt/airflow/dags" \
+            -v "$PWD:/opt/airflow/project" \
+            -e PYTHONPATH=/opt/airflow/project \
+            dataforge-airflow:ci \
+            -c "from airflow.models import DagBag; bag = DagBag(dag_folder='/opt/airflow/dags', include_examples=False); errors = bag.import_errors; print(errors if errors else 'All DAGs imported successfully.'); raise SystemExit(1 if errors else 0)"
