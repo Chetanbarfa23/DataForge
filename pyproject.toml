@@ -1,0 +1,36 @@
+# Build configuration: setuptools packages the DataForge application
+# so it can be installed locally and in CI environments.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Project metadata and runtime dependencies.
+[project]
+name = "dataforge"
+version = "0.1.0"
+description = "Automated data engineering platform for ingestion, transformation, and lakehouse analytics"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "requests>=2.31,<3.0",
+    "boto3>=1.34,<2.0",
+    "pyspark>=4.0,<5.0",
+]
+
+# Development dependencies are kept separate from runtime dependencies.
+# Install them with: python -m pip install -e ".[dev]"
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<10.0",
+]
+
+# Discover application packages under src/ during installation.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
+
+# Pytest configuration: discover tests under tests/ and make the
+# repository root importable so tests can import modules from src/.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

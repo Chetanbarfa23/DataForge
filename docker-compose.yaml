@@ -1,0 +1,27 @@
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+
+    image: dataforge-airflow:3.1.0
+    container_name: dataforge-airflow
+
+    command: standalone
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      PYTHONPATH: /opt/airflow/project
+      AWS_PROFILE: datafrog
+      AWS_DEFAULT_REGION: ap-southeast-2
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./:/opt/airflow/project
+      - ${HOME}/.aws:/home/airflow/.aws:ro
+
+    working_dir: /opt/airflow/project

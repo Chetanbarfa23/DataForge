@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data and logs
+data/local/*
+logs/*
+.DS_Store
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Airflow
+airflow.db
+airflow.cfg
+
+# Generated Python package metadata
+*.egg-info/
+
+# Editor and temporary backup files
+*.save
+*.bak
