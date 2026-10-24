@@ -1,0 +1,41 @@
+# DataForge CI: automatically validate code changes on GitHub.
+name: DataForge CI
+
+# Run CI whenever code is pushed or a pull request targets main.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Read-only repository access is sufficient for running tests.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Python Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Download the repository contents onto the GitHub runner.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Use the same Python minor version as the local project environment.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # Install DataForge and its development dependencies.
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+
+      # Execute the existing ingestion and data-quality tests.
+      - name: Run tests
+        run: python -m pytest
