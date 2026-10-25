@@ -47,7 +47,7 @@ jobs:
       - name: Build Airflow Docker image
         run: docker build -t dataforge-airflow:ci -f docker/airflow/Dockerfile .
 
-      - name: Validate DAG import, tasks, and dependencies
+      - name: Validate DAG import, tasks, dependencies, and retries
         run: |
           docker run --rm \
             --entrypoint python \
@@ -82,6 +82,7 @@ jobs:
               include_examples=False,
           )
 
+          # Check 1: DAG imports successfully.
           if bag.import_errors:
               print("DAG import errors:", bag.import_errors)
               raise SystemExit(1)
@@ -92,17 +93,41 @@ jobs:
               print(f"ERROR: DAG {dag_id} was not found.")
               raise SystemExit(1)
 
+          # Check 2: All expected tasks exist.
           actual_tasks = set(dag.task_ids)
+
           if actual_tasks != expected_tasks:
               print("ERROR: Task mismatch.")
               print("Expected:", sorted(expected_tasks))
               print("Actual:", sorted(actual_tasks))
               raise SystemExit(1)
 
+          # Check 3: Only one active run is allowed at a time.
           if dag.max_active_runs != 1:
-              print(f"ERROR: Expected max_active_runs=1, got {dag.max_active_runs}.")
+              print(
+                  f"ERROR: Expected max_active_runs=1, "
+                  f"got {dag.max_active_runs}."
+              )
               raise SystemExit(1)
 
+          # Check 4: Every task must have two retries
+          # and a retry delay of two minutes.
+          for task in dag.tasks:
+              if task.retries != 2:
+                  print(
+                      f"ERROR: Expected retries=2 for {task.task_id}, "
+                      f"got {task.retries}."
+                  )
+                  raise SystemExit(1)
+
+              if task.retry_delay.total_seconds() != 120:
+                  print(
+                      f"ERROR: Expected retry_delay=120 seconds for "
+                      f"{task.task_id}, got {task.retry_delay}."
+                  )
+                  raise SystemExit(1)
+
+          # Check 5: Task dependencies must match the expected sequence.
           actual_edges = {
               (task.task_id, downstream_id)
               for task in dag.tasks
@@ -110,13 +135,19 @@ jobs:
           }
 
           if actual_edges != set(expected_edges):
-              print("ERROR: Task dependencies do not match the expected sequence.")
+              print(
+                  "ERROR: Task dependencies do not match "
+                  "the expected sequence."
+              )
               print("Expected:", sorted(expected_edges))
               print("Actual:", sorted(actual_edges))
               raise SystemExit(1)
 
+          # Print success messages.
           print("SUCCESS: DAG imports without errors.")
           print("SUCCESS: All six expected tasks are present.")
           print("SUCCESS: Task dependencies are correct.")
           print("SUCCESS: max_active_runs is set to 1.")
+          print("SUCCESS: All tasks have retries=2.")
+          print("SUCCESS: All tasks have retry_delay=2 minutes.")
           '

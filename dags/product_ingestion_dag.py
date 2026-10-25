@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
 from airflow.sdk import dag, task
+
 
 @dag(
     dag_id="dataforge_product_ingestion",
@@ -8,6 +10,10 @@ from airflow.sdk import dag, task
     start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=2),
+    },
     tags=["dataforge", "ingestion", "data-quality", "pyspark"],
 )
 def product_ingestion_dag():
@@ -35,7 +41,7 @@ def product_ingestion_dag():
         cd /opt/airflow/project &&
         python -m src.transformations.silver_products
         """
-    
+
     # Task 4: Upload Silver Parquet files to S3
     @task.bash
     def upload_silver_to_s3():
@@ -43,7 +49,7 @@ def product_ingestion_dag():
         cd /opt/airflow/project &&
         aws s3 sync data/local/silver/products/ s3://dataforge-bronze-chetan-2026/silver/products/ --delete --exclude ".*" --profile datafrog --region ap-southeast-2
         """
-    
+
     # Task 5: Generate Gold business analytics from Silver
     @task.bash
     def transform_gold():
@@ -51,15 +57,15 @@ def product_ingestion_dag():
         cd /opt/airflow/project &&
         python -m src.transformations.gold_products
         """
-    
-    # Task 6: uload gold analysis to s3
+
+    # Task 6: Upload Gold analytics to S3
     @task.bash
     def upload_gold_to_s3():
         return """
         cd /opt/airflow/project &&
         aws s3 sync data/local/gold/products/ s3://dataforge-bronze-chetan-2026/gold/products/ --delete --exclude ".*" --profile datafrog --region ap-southeast-2
         """
-    
+
     # Define task dependencies
     ingestion = ingest_products()
     validation = validate_product_data()
@@ -70,7 +76,6 @@ def product_ingestion_dag():
 
     ingestion >> validation >> silver >> silver_upload >> gold >> gold_upload
 
-# register the dag
+
+# Register the DAG
 product_ingestion_dag()
-
-
