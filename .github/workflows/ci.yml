@@ -1,7 +1,6 @@
 # DataForge CI: automatically validate code changes on GitHub.
 name: DataForge CI
 
-# Run CI whenever code is pushed or a pull request targets main.
 on:
   push:
     branches:
@@ -10,7 +9,6 @@ on:
     branches:
       - main
 
-# Read-only repository access is sufficient for validation.
 permissions:
   contents: read
 
@@ -49,7 +47,7 @@ jobs:
       - name: Build Airflow Docker image
         run: docker build -t dataforge-airflow:ci -f docker/airflow/Dockerfile .
 
-      - name: Check DAG import errors
+      - name: Validate DAG import, tasks, and dependencies
         run: |
           docker run --rm \
             --entrypoint python \
@@ -57,4 +55,68 @@ jobs:
             -v "$PWD:/opt/airflow/project" \
             -e PYTHONPATH=/opt/airflow/project \
             dataforge-airflow:ci \
-            -c "from airflow.models import DagBag; bag = DagBag(dag_folder='/opt/airflow/dags', include_examples=False); errors = bag.import_errors; print(errors if errors else 'All DAGs imported successfully.'); raise SystemExit(1 if errors else 0)"
+            -c '
+          from airflow.models import DagBag
+
+          dag_id = "dataforge_product_ingestion"
+
+          expected_tasks = {
+              "ingest_products",
+              "validate_product_data",
+              "transform_silver",
+              "upload_silver_to_s3",
+              "transform_gold",
+              "upload_gold_to_s3",
+          }
+
+          expected_edges = [
+              ("ingest_products", "validate_product_data"),
+              ("validate_product_data", "transform_silver"),
+              ("transform_silver", "upload_silver_to_s3"),
+              ("upload_silver_to_s3", "transform_gold"),
+              ("transform_gold", "upload_gold_to_s3"),
+          ]
+
+          bag = DagBag(
+              dag_folder="/opt/airflow/dags",
+              include_examples=False,
+          )
+
+          if bag.import_errors:
+              print("DAG import errors:", bag.import_errors)
+              raise SystemExit(1)
+
+          dag = bag.dags.get(dag_id)
+
+          if dag is None:
+              print(f"ERROR: DAG {dag_id} was not found.")
+              raise SystemExit(1)
+
+          actual_tasks = set(dag.task_ids)
+          if actual_tasks != expected_tasks:
+              print("ERROR: Task mismatch.")
+              print("Expected:", sorted(expected_tasks))
+              print("Actual:", sorted(actual_tasks))
+              raise SystemExit(1)
+
+          if dag.max_active_runs != 1:
+              print(f"ERROR: Expected max_active_runs=1, got {dag.max_active_runs}.")
+              raise SystemExit(1)
+
+          actual_edges = {
+              (task.task_id, downstream_id)
+              for task in dag.tasks
+              for downstream_id in task.downstream_task_ids
+          }
+
+          if actual_edges != set(expected_edges):
+              print("ERROR: Task dependencies do not match the expected sequence.")
+              print("Expected:", sorted(expected_edges))
+              print("Actual:", sorted(actual_edges))
+              raise SystemExit(1)
+
+          print("SUCCESS: DAG imports without errors.")
+          print("SUCCESS: All six expected tasks are present.")
+          print("SUCCESS: Task dependencies are correct.")
+          print("SUCCESS: max_active_runs is set to 1.")
+          '

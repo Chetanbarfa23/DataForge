@@ -7,6 +7,7 @@ from airflow.sdk import dag, task
     schedule="0 9 * * *",
     start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
     catchup=False,
+    max_active_runs=1,
     tags=["dataforge", "ingestion", "data-quality", "pyspark"],
 )
 def product_ingestion_dag():
@@ -40,7 +41,7 @@ def product_ingestion_dag():
     def upload_silver_to_s3():
         return """
         cd /opt/airflow/project &&
-        aws s3 cp data/local/silver/products/ s3://dataforge-bronze-chetan-2026/silver/products/ --recursive --exclude ".*" --profile datafrog --region ap-southeast-2
+        aws s3 sync data/local/silver/products/ s3://dataforge-bronze-chetan-2026/silver/products/ --delete --exclude ".*" --profile datafrog --region ap-southeast-2
         """
     
     # Task 5: Generate Gold business analytics from Silver
@@ -56,7 +57,7 @@ def product_ingestion_dag():
     def upload_gold_to_s3():
         return """
         cd /opt/airflow/project &&
-        aws s3 cp data/local/gold/products/ s3://dataforge-bronze-chetan-2026/gold/products/ --recursive --exclude ".*" --profile datafrog --region ap-southeast-2
+        aws s3 sync data/local/gold/products/ s3://dataforge-bronze-chetan-2026/gold/products/ --delete --exclude ".*" --profile datafrog --region ap-southeast-2
         """
     
     # Define task dependencies
