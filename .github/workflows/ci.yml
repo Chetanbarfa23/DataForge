@@ -47,7 +47,7 @@ jobs:
       - name: Build Airflow Docker image
         run: docker build -t dataforge-airflow:ci -f docker/airflow/Dockerfile .
 
-      - name: Validate DAG import, tasks, dependencies, and retries
+      - name: Validate DAG import, tasks, dependencies, retries, and failure callback
         run: |
           docker run --rm \
             --entrypoint python \
@@ -110,7 +110,12 @@ jobs:
               )
               raise SystemExit(1)
 
-          # Check 4: Every task must have two retries
+          # Check 4: The DAG failure callback must be registered.
+          if dag.on_failure_callback is None:
+              print("ERROR: Failure callback is not registered.")
+              raise SystemExit(1)
+
+          # Check 5: Every task must have two retries
           # and a retry delay of two minutes.
           for task in dag.tasks:
               if task.retries != 2:
@@ -127,7 +132,7 @@ jobs:
                   )
                   raise SystemExit(1)
 
-          # Check 5: Task dependencies must match the expected sequence.
+          # Check 6: Task dependencies must match the expected sequence.
           actual_edges = {
               (task.task_id, downstream_id)
               for task in dag.tasks
@@ -148,6 +153,7 @@ jobs:
           print("SUCCESS: All six expected tasks are present.")
           print("SUCCESS: Task dependencies are correct.")
           print("SUCCESS: max_active_runs is set to 1.")
+          print("SUCCESS: Failure callback is registered.")
           print("SUCCESS: All tasks have retries=2.")
           print("SUCCESS: All tasks have retry_delay=2 minutes.")
           '

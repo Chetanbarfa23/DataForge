@@ -1,6 +1,26 @@
 from datetime import datetime, timezone, timedelta
 
 from airflow.sdk import dag, task
+from airflow.utils.log.logging_mixin import LoggingMixin
+
+
+def task_failure_callback(context):
+    """Log details when a DataForge task ultimately fails."""
+    logger = LoggingMixin().log
+
+    task_instance = context.get("ti")
+    exception = context.get("exception")
+
+    if task_instance:
+        logger.error(
+            "DataForge task failed: dag_id=%s, task_id=%s, run_id=%s",
+            task_instance.dag_id,
+            task_instance.task_id,
+            task_instance.run_id,
+        )
+
+    if exception:
+        logger.error("Failure reason: %s", exception)
 
 
 @dag(
@@ -14,6 +34,7 @@ from airflow.sdk import dag, task
         "retries": 2,
         "retry_delay": timedelta(minutes=2),
     },
+    on_failure_callback=task_failure_callback,
     tags=["dataforge", "ingestion", "data-quality", "pyspark"],
 )
 def product_ingestion_dag():
