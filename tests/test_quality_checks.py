@@ -47,3 +47,21 @@ def test_negative_price():
 def test_empty_product_list():
     with pytest.raises(ValueError, match="cannot be empty"):
         validate_products([])
+
+
+def test_non_numeric_price():
+    products = [
+        {"id": 1, "title": "Headphones", "price": "abc"}
+    ]
+
+    with pytest.raises(ValueError, match="invalid price"):
+        validate_products(products)
+
+
+def test_boolean_price():
+    products = [
+        {"id": 1, "title": "Headphones", "price": True}
+    ]
+
+    with pytest.raises(ValueError, match="invalid price"):
+        validate_products(products)
