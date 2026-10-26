@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from pyspark.sql import SparkSession
@@ -10,7 +11,23 @@ from pyspark.sql.types import (
 
 
 # ============================================================
-# 1. PROJECT PATHS
+# 1. LOGGING CONFIGURATION
+# ============================================================
+
+logger = logging.getLogger(__name__)
+
+
+def configure_logging():
+    """Configure logging when the script runs directly."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+# ============================================================
+# 2. PROJECT PATHS
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +42,7 @@ SILVER_PATH = str(
 
 
 # ============================================================
-# 2. CREATE SPARK SESSION
+# 3. CREATE SPARK SESSION
 # ============================================================
 
 def create_spark_session():
@@ -41,7 +58,7 @@ def create_spark_session():
 
 
 # ============================================================
-# 3. BRONZE TO SILVER TRANSFORMATION
+# 4. BRONZE TO SILVER TRANSFORMATION
 # ============================================================
 
 def transform_products():
@@ -49,15 +66,13 @@ def transform_products():
     spark = create_spark_session()
 
     try:
-        print("\n" + "=" * 60)
-        print("DATAFORGE: BRONZE TO SILVER PIPELINE")
-        print("=" * 60)
+        logger.info("Starting DataForge Bronze-to-Silver pipeline.")
 
         # ----------------------------------------------------
         # STEP 1: READ BRONZE JSON FILES
         # ----------------------------------------------------
 
-        print("\n[1/7] Reading Bronze JSON files...")
+        logger.info("Step 1/7: Reading Bronze JSON files.")
 
         raw_df = (
             spark.read
@@ -80,7 +95,8 @@ def transform_products():
         )
 
         records_read = df.count()
-        print(f"Total product records read: {records_read}")
+
+        logger.info("Total product records read: %d", records_read)
 
         if records_read == 0:
             raise ValueError(
@@ -92,7 +108,9 @@ def transform_products():
         # STEP 2: SELECT REQUIRED COLUMNS AND CAST TYPES
         # ----------------------------------------------------
 
-        print("\n[2/7] Selecting columns and standardizing data types...")
+        logger.info(
+            "Step 2/7: Selecting required columns and standardizing data types."
+        )
 
         expected_columns = {
             "id": LongType(),
@@ -124,7 +142,7 @@ def transform_products():
         # STEP 3: REMOVE INVALID PRODUCT IDS
         # ----------------------------------------------------
 
-        print("\n[3/7] Removing records with invalid product IDs...")
+        logger.info("Step 3/7: Removing records with invalid product IDs.")
 
         before_id_filter = df.count()
 
@@ -135,13 +153,13 @@ def transform_products():
 
         invalid_ids_removed = before_id_filter - df.count()
 
-        print(f"Invalid IDs removed: {invalid_ids_removed}")
+        logger.info("Invalid product IDs removed: %d", invalid_ids_removed)
 
         # ----------------------------------------------------
         # STEP 4: VALIDATE PRICES
         # ----------------------------------------------------
 
-        print("\n[4/7] Validating product prices...")
+        logger.info("Step 4/7: Validating product prices.")
 
         before_price_filter = df.count()
 
@@ -153,13 +171,13 @@ def transform_products():
 
         invalid_prices_removed = before_price_filter - df.count()
 
-        print(f"Invalid prices removed: {invalid_prices_removed}")
+        logger.info("Invalid product prices removed: %d", invalid_prices_removed)
 
         # ----------------------------------------------------
         # STEP 5: CLEAN TEXT COLUMNS
         # ----------------------------------------------------
 
-        print("\n[5/7] Cleaning text columns...")
+        logger.info("Step 5/7: Cleaning text columns.")
 
         text_columns = [
             "title",
@@ -183,7 +201,7 @@ def transform_products():
         # STEP 6: REMOVE DUPLICATE PRODUCTS
         # ----------------------------------------------------
 
-        print("\n[6/7] Removing duplicate product IDs...")
+        logger.info("Step 6/7: Removing duplicate product IDs.")
 
         before_deduplication = df.count()
 
@@ -193,9 +211,9 @@ def transform_products():
             before_deduplication - df.count()
         )
 
-        print(
-            f"Duplicate records removed: "
-            f"{duplicate_records_removed}"
+        logger.info(
+            "Duplicate product records removed: %d",
+            duplicate_records_removed,
         )
 
         # Add the processing timestamp.
@@ -206,14 +224,14 @@ def transform_products():
 
         cleaned_records = df.count()
 
-        print(f"\nTotal records read: {records_read}")
-        print(f"Final Silver records: {cleaned_records}")
+        logger.info("Total Bronze records read: %d", records_read)
+        logger.info("Final Silver records: %d", cleaned_records)
 
         # ----------------------------------------------------
         # STEP 7: WRITE SILVER PARQUET FILES
         # ----------------------------------------------------
 
-        print("\n[7/7] Writing Silver data in Parquet format...")
+        logger.info("Step 7/7: Writing Silver data in Parquet format.")
 
         (
             df.write
@@ -221,26 +239,24 @@ def transform_products():
             .parquet(SILVER_PATH)
         )
 
-        print(f"Silver output: {SILVER_PATH}")
+        logger.info("Silver output path: %s", SILVER_PATH)
 
         # ----------------------------------------------------
         # VERIFY OUTPUT
         # ----------------------------------------------------
 
-        print("\nVerifying saved Silver data...")
+        logger.info("Verifying saved Silver data.")
 
         silver_df = spark.read.parquet(SILVER_PATH)
 
         saved_records = silver_df.count()
 
-        print(f"Records saved: {saved_records}")
+        logger.info("Records saved: %d", saved_records)
 
-        print("\nSample Silver records:")
-
+        logger.info("Displaying sample Silver records.")
         silver_df.show(10, truncate=False)
 
-        print("\nSilver schema:")
-
+        logger.info("Displaying Silver schema.")
         silver_df.printSchema()
 
         if saved_records != cleaned_records:
@@ -249,17 +265,26 @@ def transform_products():
                 "does not match cleaned record count."
             )
 
-        print("\n" + "=" * 60)
-        print("SILVER PIPELINE COMPLETED SUCCESSFULLY")
-        print("=" * 60)
+        logger.info(
+            "Silver pipeline completed successfully. "
+            "Records read=%d, records written=%d",
+            records_read,
+            saved_records,
+        )
+
+    except Exception:
+        logger.exception("Silver transformation failed.")
+        raise
 
     finally:
         spark.stop()
+        logger.info("Spark session stopped.")
 
 
 # ============================================================
-# 4. ENTRY POINT
+# 5. ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":
+    configure_logging()
     transform_products()
