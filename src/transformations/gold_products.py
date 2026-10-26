@@ -1,7 +1,24 @@
+import logging
 from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+
+
+# =====================================================
+# LOGGING CONFIGURATION
+# =====================================================
+
+logger = logging.getLogger(__name__)
+
+
+def configure_logging():
+    """Configure logging when the script runs directly."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
 # =====================================================
@@ -22,6 +39,8 @@ GOLD_PATH = PROJECT_ROOT / "data" / "local" / "gold" / "products"
 # =====================================================
 
 def create_spark_session():
+    """Create a local Spark session for Gold analytics."""
+
     return (
         SparkSession.builder
         .appName("DataForge-Gold-Analytics")
@@ -40,24 +59,22 @@ def build_gold_analytics():
     spark = create_spark_session()
 
     try:
-        print("\n" + "=" * 60)
-        print("DATAFORGE: SILVER TO GOLD PIPELINE")
-        print("=" * 60)
+        logger.info("Starting DataForge Silver-to-Gold pipeline.")
 
         # 1. Read cleaned Silver data
-        print("\n[1/5] Reading Silver Parquet data...")
+        logger.info("Step 1/5: Reading Silver Parquet data.")
 
         df = spark.read.parquet(SILVER_PATH)
 
         total_products = df.count()
 
-        print(f"Products loaded: {total_products}")
+        logger.info("Products loaded: %d", total_products)
 
         if total_products == 0:
             raise ValueError("Silver layer contains no products.")
 
         # 2. Overall business metrics
-        print("\n[2/5] Calculating overall product metrics...")
+        logger.info("Step 2/5: Calculating overall product metrics.")
 
         overall_metrics = df.agg(
             F.count("*").alias("total_products"),
@@ -71,7 +88,7 @@ def build_gold_analytics():
         overall_metrics.show(truncate=False)
 
         # 3. Category-level analytics
-        print("\n[3/5] Calculating category analytics...")
+        logger.info("Step 3/5: Calculating category analytics.")
 
         category_metrics = (
             df.groupBy("category")
@@ -87,7 +104,7 @@ def build_gold_analytics():
         category_metrics.show(truncate=False)
 
         # 4. Low-stock products
-        print("\n[4/5] Finding products with low stock...")
+        logger.info("Step 4/5: Finding products with low stock.")
 
         low_stock_products = (
             df.filter(F.col("stock") < 10)
@@ -101,10 +118,14 @@ def build_gold_analytics():
             .orderBy(F.asc("stock"))
         )
 
+        low_stock_count = low_stock_products.count()
+
+        logger.info("Products with stock below 10: %d", low_stock_count)
+
         low_stock_products.show(truncate=False)
 
         # 5. Save Gold datasets
-        print("\n[5/5] Saving Gold Parquet datasets...")
+        logger.info("Step 5/5: Saving Gold Parquet datasets.")
 
         GOLD_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -133,15 +154,28 @@ def build_gold_analytics():
             .parquet(str(GOLD_PATH / "low_stock_products"))
         )
 
-        print(f"\nGold datasets saved to: {GOLD_PATH}")
+        logger.info("Gold datasets saved to: %s", GOLD_PATH)
 
-        print("\n" + "=" * 60)
-        print("GOLD PIPELINE COMPLETED SUCCESSFULLY")
-        print("=" * 60)
+        logger.info(
+            "Gold pipeline completed successfully. "
+            "Total products=%d, low-stock products=%d",
+            total_products,
+            low_stock_count,
+        )
+
+    except Exception:
+        logger.exception("Gold analytics transformation failed.")
+        raise
 
     finally:
         spark.stop()
+        logger.info("Spark session stopped.")
 
+
+# =====================================================
+# ENTRY POINT
+# =====================================================
 
 if __name__ == "__main__":
+    configure_logging()
     build_gold_analytics()
