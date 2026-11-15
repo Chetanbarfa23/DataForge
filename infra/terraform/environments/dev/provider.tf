@@ -5,7 +5,6 @@ terraform {
     bucket       = "dataforge-bronze-chetan-2026"
     key          = "terraform/state/dev/terraform.tfstate"
     region       = "ap-southeast-2"
-    profile      = "datafrog"
     encrypt      = true
     use_lockfile = true
   }
@@ -19,6 +18,5 @@ terraform {
 }
 
 provider "aws" {
-  region  = var.aws_region
-  profile = "datafrog"
+  region = var.aws_region
 }
