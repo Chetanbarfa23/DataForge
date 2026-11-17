@@ -88,6 +88,17 @@ resource "aws_iam_role_policy" "terraform_state" {
         ]
 
         Resource = "arn:aws:iam::868335351942:oidc-provider/token.actions.githubusercontent.com"
+      },
+
+      # Read existing GitHub Actions IAM role
+      {
+        Effect = "Allow"
+
+        Action = [
+          "iam:GetRole"
+        ]
+
+        Resource = "arn:aws:iam::868335351942:role/dataforge-github-actions"
       }
     ]
   })
