@@ -90,14 +90,15 @@ resource "aws_iam_role_policy" "terraform_state" {
         Resource = "arn:aws:iam::868335351942:oidc-provider/token.actions.githubusercontent.com"
       },
 
-      # Read existing GitHub Actions IAM role and inline policies
+      # Read existing GitHub Actions IAM role and its policies
       {
         Effect = "Allow"
 
         Action = [
           "iam:GetRole",
           "iam:ListRolePolicies",
-          "iam:GetRolePolicy"
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies"
         ]
 
         Resource = "arn:aws:iam::868335351942:role/dataforge-github-actions"
